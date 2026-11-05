@@ -2,6 +2,7 @@ import '../../../configuration/RemoteConfiguration.js';
 import { betterAuth } from 'better-auth';
 import { jwt } from 'better-auth/plugins';
 import { Pool } from 'pg';
+import {randomUUID} from 'node:crypto';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -16,7 +17,18 @@ export const auth = betterAuth({
   secret: required('BETTER_AUTH_SECRET'),
   baseURL: required('BETTER_AUTH_URL'),
   trustedOrigins: (process.env.TRUSTED_ORIGINS ?? 'http://localhost:3000,http://localhost:8080').split(','),
-  emailAndPassword: { enabled: true, minPasswordLength: 12, maxPasswordLength:128 },
+  emailAndPassword: { enabled: true, minPasswordLength: 12, maxPasswordLength:128,
+    resetPasswordTokenExpiresIn:1800,revokeSessionsOnPasswordReset:true,
+    sendResetPassword:async({user,url})=>{
+      // This private job is relayed by RPC; reset links must never reach audit.events.
+      const id=randomUUID();
+      await pool.query(`INSERT INTO outbox_events(event_id,event_type,aggregate_id,payload)
+        SELECT $1,'identity.password.reset.private',$2,$3::jsonb
+        WHERE EXISTS(SELECT 1 FROM "user" WHERE id=$2 AND deletion_requested_at IS NULL)`,
+        [id,user.id,JSON.stringify({userId:user.id,source:id,actionUrl:url,expiresAt:new Date(Date.now()+1800000).toISOString()})]);
+    },
+  },
+  rateLimit:{enabled:true,customRules:{'/request-password-reset':{window:60,max:5},'/reset-password':{window:60,max:5}}},
   advanced: {ipAddress: {ipAddressHeaders:['x-forwarded-for']}},
   user: {
     additionalFields: {

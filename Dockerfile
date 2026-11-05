@@ -6,7 +6,7 @@ RUN npm ci
 COPY tsconfig.json ./
 COPY src src
 RUN npm run build
-RUN node --test dist/iam/interfaces/rest/AuthInputValidation.test.js dist/iam/application/internal/queryservices/UserDirectoryQueryServiceImpl.test.js dist/iam/domain/model/valueobjects/ProfileType.test.js dist/iam/application/internal/commandservices/AccountDeletionService.test.js dist/shared/infrastructure/health/ServiceHealth.test.js
+RUN node --test dist/iam/interfaces/rest/AuthInputValidation.test.js dist/iam/application/internal/queryservices/UserDirectoryQueryServiceImpl.test.js dist/iam/domain/model/valueobjects/ProfileType.test.js dist/iam/application/internal/commandservices/AccountDeletionService.test.js dist/shared/infrastructure/health/ServiceHealth.test.js dist/shared/infrastructure/messaging/RequestTrace.test.js
 FROM node:22-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
