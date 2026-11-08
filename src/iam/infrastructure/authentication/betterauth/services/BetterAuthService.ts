@@ -29,7 +29,10 @@ export const auth = betterAuth({
     },
   },
   rateLimit:{enabled:true,customRules:{'/request-password-reset':{window:60,max:5},'/reset-password':{window:60,max:5}}},
-  advanced: {ipAddress: {ipAddressHeaders:['x-forwarded-for']}},
+  advanced: {
+    cookiePrefix: process.env.AUTH_COOKIE_PREFIX || 'better-auth',
+    ipAddress: {ipAddressHeaders:['x-forwarded-for']},
+  },
   user: {
     additionalFields: {
       profileType: {
