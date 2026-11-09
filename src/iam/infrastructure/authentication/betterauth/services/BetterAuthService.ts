@@ -28,10 +28,17 @@ export const auth = betterAuth({
         [id,user.id,JSON.stringify({userId:user.id,source:id,actionUrl:url,expiresAt:new Date(Date.now()+1800000).toISOString()})]);
     },
   },
-  rateLimit:{enabled:true,customRules:{'/request-password-reset':{window:60,max:5},'/reset-password':{window:60,max:5}}},
+  rateLimit: {
+    enabled: true,
+    customRules: {
+      '/sign-in/email': {window: 60, max: 5},
+      '/request-password-reset': {window: 60, max: 5},
+      '/reset-password': {window: 60, max: 5},
+    },
+  },
   advanced: {
     cookiePrefix: process.env.AUTH_COOKIE_PREFIX || 'better-auth',
-    ipAddress: {ipAddressHeaders:['x-forwarded-for']},
+    ipAddress: {ipAddressHeaders:['x-hydrosmart-client-ip']},
   },
   user: {
     additionalFields: {
