@@ -8,7 +8,7 @@ import {accountDeletionController} from './iam/interfaces/rest/AccountDeletionCo
 import { startIdentityOutbox } from './shared/infrastructure/messaging/IdentityOutbox.js';
 import { createServer } from 'node:http';
 import { startRpcServer,brokerHealth } from './shared/infrastructure/messaging/RabbitRpc.js';
-import { auth,pool } from './iam/infrastructure/authentication/betterauth/services/BetterAuthService.js';
+import { auth,pool,signupChallenge } from './iam/infrastructure/authentication/betterauth/services/BetterAuthService.js';
 import { JwtTokenService } from './iam/infrastructure/tokens/jwt/services/JwtTokenService.js';
 import { PgUserRepository } from './iam/infrastructure/persistence/postgresql/repositories/PgUserRepository.js';
 import { isInternalService } from './iam/infrastructure/authorization/configuration/InternalServiceAuthorization.js';
@@ -51,6 +51,10 @@ const server = createServer((req, res) => trace(req,res,async()=>{
       const id=decodeURIComponent(path.slice('/internal/v1/users/'.length));
       const result=await iam.findById(id);
       return json(result?200:404,result??{});
+    }
+    if (req.method === 'GET' && path === '/api/auth/registration-challenge') {
+      res.setHeader('Cache-Control','no-store');
+      return json(200,{siteKey:signupChallenge.siteKey});
     }
     if (path.startsWith('/api/auth/')) return await authenticationHandler(req,res);
     return json(404,{error:'not_found'});
