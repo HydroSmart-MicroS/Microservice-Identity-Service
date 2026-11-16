@@ -7,7 +7,7 @@ import {AccountDeletionService} from './iam/application/internal/commandservices
 import {accountDeletionController} from './iam/interfaces/rest/AccountDeletionController.js';
 import { startIdentityOutbox } from './shared/infrastructure/messaging/IdentityOutbox.js';
 import { createServer } from 'node:http';
-import { startRpcServer,brokerHealth } from './shared/infrastructure/messaging/RabbitRpc.js';
+import { startRpcServer,brokerHealth,closeRpcClient } from './shared/infrastructure/messaging/RabbitRpc.js';
 import { auth,pool,signupChallenge } from './iam/infrastructure/authentication/betterauth/services/BetterAuthService.js';
 import { JwtTokenService } from './iam/infrastructure/tokens/jwt/services/JwtTokenService.js';
 import { PgUserRepository } from './iam/infrastructure/persistence/postgresql/repositories/PgUserRepository.js';
@@ -63,4 +63,4 @@ const server = createServer((req, res) => trace(req,res,async()=>{
   }
 }));
 server.listen(Number(process.env.PORT ?? 8080),'0.0.0.0',()=>{void startRpcServer('identity');startIdentityOutbox(pool);deletion.start();});
-for (const signal of ['SIGINT','SIGTERM']) process.on(signal,()=>server.close(()=>{void pool.end();}));
+for (const signal of ['SIGINT','SIGTERM']) process.on(signal,()=>server.close(()=>{void Promise.all([pool.end(),closeRpcClient()]);}));
