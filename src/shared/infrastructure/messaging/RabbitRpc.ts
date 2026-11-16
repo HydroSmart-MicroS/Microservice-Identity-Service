@@ -3,12 +3,32 @@ import amqp from 'amqplib';
 import {randomUUID} from 'node:crypto';
 type Frame={status:number;headers:Record<string,string>;body:string};
 const destinations=new Set(['identity','properties','telemetry','analytics','reports','notifications','billing','config-service']);
+type BrokerConnection=Awaited<ReturnType<typeof amqp.connect>>;
+let outgoing:Promise<BrokerConnection>|null=null;
+let clientClosed=false;
+function outgoingConnection(){
+ if(clientClosed)throw new Error('Broker client closed');
+ if(!outgoing){
+  let pending:Promise<BrokerConnection>;
+  const reset=()=>{if(outgoing===pending)outgoing=null;};
+  pending=amqp.connect(process.env.RABBITMQ_URL!,{timeout:4000,noDelay:true}).then(connection=>{
+   connection.on('error',reset);connection.once('close',reset);return connection;
+  }).catch(error=>{reset();throw error;});
+  outgoing=pending;
+ }
+ return outgoing;
+}
+export async function closeRpcClient(){
+ clientClosed=true;const pending=outgoing;outgoing=null;
+ if(pending)try{await (await pending).close();}catch{}
+}
 export async function rpc(service:string,path:string,headers:Record<string,string>={},method='GET',body?:unknown):Promise<Frame>{
  if(!destinations.has(service)||!path.startsWith('/')||path.startsWith('//'))throw new Error('Invalid broker destination');
- const connection=await amqp.connect(process.env.RABBITMQ_URL!,{timeout:4000});
+ const connection=await outgoingConnection();
+ const channel=await connection.createConfirmChannel();
+ channel.on('error',()=>{});
  try{
-  const channel=await connection.createConfirmChannel();
-  const {queue}=await channel.assertQueue('',{exclusive:true,autoDelete:true});
+  const {queue}=await channel.assertQueue('',{exclusive:true,autoDelete:true,arguments:{'x-expires':30000}});
   const correlationId=randomUUID();
   let timer:NodeJS.Timeout;
   const answer=new Promise<Frame>((resolve,reject)=>{
@@ -25,7 +45,7 @@ export async function rpc(service:string,path:string,headers:Record<string,strin
    }).catch(reject);
   });
   try{return await answer;}finally{clearTimeout(timer!);}
- }finally{await connection.close().catch(()=>{});}
+ }finally{await channel.close().catch(()=>{});}
 }
 export async function rpcJson(service:string,path:string){
  const response=await rpc(service,path);
@@ -34,7 +54,7 @@ export async function rpcJson(service:string,path:string){
 }
 let rpcConnected=false;
 export async function brokerHealth(){
- const connection=await amqp.connect(process.env.RABBITMQ_URL!,{timeout:1500});connection.on('error',()=>{});
+ const connection=await amqp.connect(process.env.RABBITMQ_URL!,{timeout:1500,noDelay:true});connection.on('error',()=>{});
  try{
   const channel=await connection.createConfirmChannel();channel.on('error',()=>{});
   await channel.checkExchange('hydrosmart.rpc');await channel.checkExchange('hydrosmart.events');
@@ -47,7 +67,7 @@ export async function startRpcServer(service:string){
   while(true){
    let connection:Awaited<ReturnType<typeof amqp.connect>>|undefined;
    try{
-    connection=await amqp.connect(process.env.RABBITMQ_URL!,{timeout:4000});
+    connection=await amqp.connect(process.env.RABBITMQ_URL!,{timeout:4000,noDelay:true});
     const channel=await connection.createChannel();
     await channel.assertExchange('hydrosmart.rpc','direct',{durable:true});
     await channel.assertQueue('rpc.'+service,{durable:true});
