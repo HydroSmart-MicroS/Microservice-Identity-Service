@@ -3,6 +3,7 @@ import { betterAuth } from 'better-auth';
 import { jwt } from 'better-auth/plugins';
 import { Pool } from 'pg';
 import {randomUUID} from 'node:crypto';
+import { registrationChallenge } from './RegistrationChallenge.js';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -12,10 +13,13 @@ function required(name: string): string {
 export const pool = new Pool({ connectionString: required('DATABASE_URL'), max: 5, connectionTimeoutMillis: 3000 });
 // Idle connections can fail independently of a request when PostgreSQL restarts.
 pool.on('error',()=>console.warn('Identity database connection lost; the pool will reconnect.'));
+const baseURL = required('BETTER_AUTH_URL');
+export const signupChallenge = registrationChallenge(baseURL);
 export const auth = betterAuth({
+  hooks: { before: signupChallenge.before },
   database: pool,
   secret: required('BETTER_AUTH_SECRET'),
-  baseURL: required('BETTER_AUTH_URL'),
+  baseURL,
   trustedOrigins: (process.env.TRUSTED_ORIGINS ?? 'http://localhost:3000,http://localhost:8080').split(','),
   emailAndPassword: { enabled: true, minPasswordLength: 12, maxPasswordLength:128,
     resetPasswordTokenExpiresIn:1800,revokeSessionsOnPasswordReset:true,
